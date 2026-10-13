@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from .champions import catalog
 from .config import Config
+from .locking import is_locked
 from .runtime import Runtime
 from .schemas import Draft, Settings
 
@@ -115,8 +116,10 @@ def create_app(config=None):
 
     @app.put("/api/settings")
     def settings(body: Settings):
-        if runtime.job["status"] == "running":
-            raise HTTPException(409, "Wait for the running task before changing data filters")
+        if runtime.job["status"] == "running" or any(
+            is_locked(config.data_dir / name) for name in ("collection.lock", "training.lock")
+        ):
+            raise HTTPException(409, "Stop collection and wait for training to finish before changing data filters")
         runtime.settings = body
         runtime.store.set_meta("settings", body.model_dump())
         config.region, config.queue = body.region, body.queue

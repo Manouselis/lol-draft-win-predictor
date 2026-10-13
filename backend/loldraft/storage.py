@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from .config import cutoff_ts, now_ts
@@ -28,10 +29,15 @@ class Store:
                 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """)
 
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=30)
-        db.execute("PRAGMA journal_mode=WAL")
-        return db
+        try:
+            db.execute("PRAGMA journal_mode=WAL")
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def insert(self, match: dict) -> bool:
         with self.connect() as db:
@@ -61,8 +67,10 @@ class Store:
             return [json.loads(row[0]) for row in db.execute(query, args)]
 
     def stats(self, region=None, queue=None, patches=None):
+        cutoff = cutoff_ts()
+        training_cutoff = cutoff + 86400
         clause = "started_at>=? AND started_at<=?"
-        args = [cutoff_ts(), now_ts()]
+        args = [cutoff, now_ts()]
         if region:
             clause += " AND region=?"
             args.append(region)
@@ -75,8 +83,10 @@ class Store:
         with self.connect() as db:
             stored = db.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
             pending = db.execute("SELECT COUNT(*) FROM downloads WHERE status='pending'").fetchone()[0]
-            count, oldest, newest = db.execute(
-                "SELECT COUNT(*),MIN(started_at),MAX(started_at) FROM matches WHERE " + clause, args
+            count, oldest, newest, trainable = db.execute(
+                "SELECT COUNT(*),MIN(started_at),MAX(started_at),"
+                "COALESCE(SUM(CASE WHEN started_at>=? THEN 1 ELSE 0 END),0) "
+                "FROM matches WHERE " + clause, [training_cutoff] + args
             ).fetchone()
             patch_counts = dict(db.execute("SELECT patch,COUNT(*) FROM matches WHERE " + clause + " GROUP BY patch", args))
         return {
@@ -84,8 +94,10 @@ class Store:
             "outside_filter_or_expired": stored - count,
             "patches": patch_counts,
             "oldest": oldest, "newest": newest,
+            "training_matches": trainable, "training_window_days": 29,
+            "training_cutoff": training_cutoff, "aging_matches": count - trainable,
             "last_refresh": self.get_meta("last_refresh"), "pending_downloads": pending,
-            "window_days": 30, "cutoff": cutoff_ts(),
+            "window_days": 30, "cutoff": cutoff,
         }
 
     def set_meta(self, key, value):

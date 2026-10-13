@@ -12,22 +12,15 @@ from .storage import Store
 
 
 def run_collection(config, store, settings, *, stop=None, auto_train=False):
+    from .jobs import AutoTrainer
     from .riot import collect
-    trained_count = 0
+    automatic = AutoTrainer(config, store, settings) if auto_train else None
 
     def progress(message):
-        nonlocal trained_count
         store.set_meta("collection", {"status": "running", "message": message, "updated_at": now_ts()})
         print(message, flush=True)
-        if auto_train:
-            count = store.stats(settings.region, settings.queue, settings.patches)["matches"] if "recent matches;" in message else 0
-            if count >= config.min_matches and (not trained_count or count >= trained_count + 25000):
-                from .model import train
-                try:
-                    train(store, settings, minimum=config.min_matches, progress=lambda m: print(m, flush=True))
-                    trained_count = count
-                except ValueError as exc:
-                    print(f"Training deferred: {exc}", flush=True)
+        if automatic:
+            automatic.maybe_train()
 
     with exclusive(config.data_dir / "collection.lock"):
         stop_path = config.data_dir / "collection.stop"
@@ -35,6 +28,8 @@ def run_collection(config, store, settings, *, stop=None, auto_train=False):
         combined_stop = CancelSignal(stop or threading.Event(), stop_path)
         try:
             result = collect(store, settings, config.riot_key, stop=combined_stop, progress=progress)
+            if automatic:
+                automatic.maybe_train(force=True)
             store.set_meta("collection", {"status": "complete", "result": result, "updated_at": now_ts()})
             return result
         except Exception as exc:
@@ -43,6 +38,9 @@ def run_collection(config, store, settings, *, stop=None, auto_train=False):
             message = str(exc) if isinstance(exc, (RiotError, ValueError)) else "Collection failed; see local diagnostics"
             store.set_meta("collection", {"status": "stopped", "message": message, "updated_at": now_ts()})
             raise RuntimeError(message) from None
+        finally:
+            if automatic:
+                automatic.finish()
 
 
 def main():

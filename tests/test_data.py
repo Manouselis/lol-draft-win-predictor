@@ -71,6 +71,33 @@ def test_match_queue_survives_reopening(tmp_path):
     assert not Store(tmp_path).pending("EUW1")
 
 
+def test_training_readiness_excludes_the_oldest_day(tmp_path, raw):
+    from loldraft.config import now_ts
+    store = Store(tmp_path)
+    current = copy.deepcopy(raw)
+    aging = copy.deepcopy(raw)
+    aging["metadata"]["matchId"] = "EUW1_123"
+    aging["info"]["gameStartTimestamp"] = (now_ts() - int(29.5 * 86400)) * 1000
+    store.insert(normalize(current))
+    store.insert(normalize(aging))
+    stats = store.stats()
+    assert stats["matches"] == 2
+    assert stats["training_matches"] == stats["aging_matches"] == 1
+    assert stats["training_window_days"] == 29
+
+
+def test_database_connections_close_and_failed_transactions_roll_back(tmp_path):
+    import sqlite3
+    store = Store(tmp_path)
+    with pytest.raises(RuntimeError):
+        with store.connect() as database:
+            database.execute("INSERT INTO meta VALUES ('rollback-test','true')")
+            raise RuntimeError("SYNTHETIC interrupted write")
+    assert store.get_meta("rollback-test") is None
+    with pytest.raises(sqlite3.ProgrammingError):
+        database.execute("SELECT 1")
+
+
 def test_champion_numeric_key_is_not_display_name():
     data = parse_catalog({"data": {"Jinx": {"key": "222", "id": "Jinx", "name": "Jinx"},
                                      "MonkeyKing": {"key": "62", "id": "MonkeyKing", "name": "Wukong"}}}, "16.20.1")

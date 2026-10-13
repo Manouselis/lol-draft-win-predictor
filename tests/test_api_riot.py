@@ -42,6 +42,18 @@ def test_duplicate_lock_rejected_but_unknown_slots_preserved(config):
         assert client.get("/api/state").json()["draft"]["allies"][0]["champion_id"] == 0
 
 
+def test_external_collection_blocks_scope_changes_and_can_be_stopped(config):
+    from loldraft.locking import exclusive
+    from loldraft.schemas import Settings
+    with TestClient(create_app(config)) as client:
+        with exclusive(config.data_dir / "collection.lock"):
+            response = client.put("/api/settings", json=Settings(region="NA1").model_dump())
+            assert response.status_code == 409
+            assert client.get("/api/state").json()["settings"]["region"] == "EUW1"
+            assert client.post("/api/jobs/stop").status_code == 200
+            assert (config.data_dir / "collection.stop").exists()
+
+
 def test_429_honors_retry_after_without_exposing_key():
     calls, waits = [], []
     def transport(request):

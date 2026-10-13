@@ -58,3 +58,30 @@ def test_collector_os_lock_and_cross_process_stop_marker(tmp_path):
     marker.write_text("stop")
     assert signal.is_set()
     assert signal.wait(120)
+
+
+def test_discovery_resume_uses_anonymous_position_and_preserves_failed_seed(tmp_path, monkeypatch):
+    import json
+    store = Store(tmp_path)
+    original = riot.RiotClient
+    monkeypatch.setattr(original, "seed_players", lambda *args: iter([
+        ("SYNTHETIC_FIRST_PLAYER", "SILVER"), ("SYNTHETIC_SECOND_PLAYER", "GOLD")]))
+    monkeypatch.setattr(riot, "RiotClient", lambda *args, **kwargs: original(*args, throttle=False, **kwargs))
+    def interrupted(request):
+        if "SYNTHETIC_SECOND_PLAYER" in request.url.path:
+            return httpx.Response(403)
+        return httpx.Response(200, json=[])
+    with pytest.raises(riot.RiotError):
+        riot.collect(store, Settings(), "SYNTHETIC_KEY", client=httpx.Client(
+            transport=httpx.MockTransport(interrupted)))
+    cursor = store.get_meta("discovery")
+    assert cursor["seeds_completed"] == 1
+    assert "PLAYER" not in json.dumps(cursor)
+    resumed_paths = []
+    def resumed(request):
+        resumed_paths.append(request.url.path)
+        return httpx.Response(200, json=[])
+    riot.collect(store, Settings(), "SYNTHETIC_KEY", client=httpx.Client(transport=httpx.MockTransport(resumed)))
+    assert len(resumed_paths) == 1
+    assert "SYNTHETIC_SECOND_PLAYER" in resumed_paths[0]
+    assert store.get_meta("discovery")["completed"]

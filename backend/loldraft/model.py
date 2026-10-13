@@ -70,6 +70,31 @@ def matrix(matches, supported, *, augment=False, total=None):
 
 
 def train(store, settings, *, minimum=50000, progress=None):
+    started = False
+    scope = {"region": settings.region, "queue": settings.queue, "patches": sorted(settings.patches)}
+
+    def report(message):
+        nonlocal started
+        started = True  # _fit calls this only after acquiring the training lock.
+        store.set_meta("training", {"status": "running", "message": message,
+                                   "updated_at": now_ts(), "scope": scope})
+        if progress:
+            progress(message)
+
+    try:
+        metadata = _fit(store, settings, minimum=minimum, progress=report)
+        store.set_meta("training", {"status": "complete", "message": "Historical model trained and evaluated",
+                                   "updated_at": now_ts(), "scope": scope, "version": metadata["version"]})
+        return metadata
+    except Exception as exc:
+        if started:
+            message = str(exc) if isinstance(exc, ValueError) else "Training failed; the previous model was preserved"
+            store.set_meta("training", {"status": "failed", "message": message,
+                                       "updated_at": now_ts(), "scope": scope})
+        raise
+
+
+def _fit(store, settings, *, minimum=50000, progress=None):
     progress = progress or (lambda _: None)
     with exclusive(store.directory / "training.lock"):
         progress("Loading only recent real matches and separating chronological cohorts")
@@ -152,6 +177,8 @@ def train(store, settings, *, minimum=50000, progress=None):
                     "expires_at": matches[0]["started_at"] + 30 * 86400,
                     "newest": matches[-1]["started_at"], "matches": len(matches),
                     "region": settings.region, "queue": settings.queue,
+                    "scope": {"region": settings.region, "queue": settings.queue,
+                              "patches": sorted(settings.patches)},
                     "patches": dict(Counter(m["patch"] for m in fit)),
                     "dataset_patches": dict(Counter(m["patch"] for m in matches)),
                     "patch_weights": dict(patch_weights), "synthetic": False,

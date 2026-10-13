@@ -91,10 +91,14 @@ class Runtime:
             collection = self.store.get_meta("collection")
             if collection and collection["status"] == "running" and not is_locked(self.config.data_dir / "collection.lock"):
                 collection = {**collection, "status": "interrupted", "message": "Collector stopped; resume to continue saved downloads."}
+            training = self.store.get_meta("training")
+            if (training and training["status"] == "running" and now_ts() - training.get("updated_at", 0) > 3
+                    and not is_locked(self.config.data_dir / "training.lock")):
+                training = {**training, "status": "interrupted", "message": "Training interrupted; the previous artifact was preserved."}
             return {"draft": self.draft.model_dump(), "mode": self.mode, "prediction": prediction,
                     "confirmed": confirmed, "history": self.history, "dataset": self.cached_stats,
                     "model": metadata, "settings": self.settings.model_dump(), "job": self.job.copy(),
-                    "collection": collection,
+                    "collection": collection, "training": training,
                     "integration": {"status": self.monitor.status, "message": self.monitor.message,
                                     "client_detected": self.monitor.available,
                                     "live_enabled": self.config.lcu_enabled and self.config.riot_live_approved},

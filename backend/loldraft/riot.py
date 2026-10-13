@@ -147,6 +147,13 @@ def collect(store, settings, key, *, stop=None, progress=None, client=None):
     initial = store.stats(settings.region, settings.queue, settings.patches)["matches"]
     scope_total = initial
     counted_at = time.monotonic()
+    discovery_scope = {"region": settings.region, "queue": settings.queue, "tiers": sorted(settings.tiers)}
+    cursor = store.get_meta("discovery", {})
+    if (cursor.get("scope") != discovery_scope or cursor.get("completed") or
+            now_ts() - cursor.get("cycle_started_at", 0) >= 86400):
+        cursor = {"scope": discovery_scope, "seeds_completed": 0, "cycle_started_at": now_ts()}
+    # A traversal ordinal is persisted, never a PUUID, player name, or hash of an identity.
+    completed_seeds = cursor.get("seeds_completed", 0)
     # Pending IDs persist; seed identities only live in memory and never originate from the local draft.
     def drain():
         nonlocal scope_total, counted_at
@@ -184,8 +191,12 @@ def collect(store, settings, key, *, stop=None, progress=None, client=None):
             if drain():
                 return dict(counts)
         seen = set()
-        for puuid, tier in api.seed_players(settings.region, settings.queue, settings.tiers):
+        for ordinal, (puuid, tier) in enumerate(api.seed_players(settings.region, settings.queue, settings.tiers)):
+            if ordinal < completed_seeds:
+                continue
             if puuid in seen:
+                cursor.update(seeds_completed=ordinal + 1, updated_at=now_ts())
+                store.set_meta("discovery", cursor)
                 continue
             seen.add(puuid)
             progress(f"Discovering last-30-day matches from {tier} ranked seed cohort")
@@ -199,6 +210,10 @@ def collect(store, settings, key, *, stop=None, progress=None, client=None):
                         return dict(counts)
                 if len(ids) < 100:
                     break
+            cursor.update(seeds_completed=ordinal + 1, updated_at=now_ts())
+            store.set_meta("discovery", cursor)
+        cursor.update(completed=True, updated_at=now_ts())
+        store.set_meta("discovery", cursor)
         progress("Seed cohort exhausted; add tiers or resume with refreshed ladder entries")
         return dict(counts)
     finally:

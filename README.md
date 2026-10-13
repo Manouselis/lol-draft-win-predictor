@@ -24,7 +24,7 @@ In a second PowerShell window, start or resume collection:
 .\.venv\Scripts\python.exe -m loldraft.cli collect --auto-train
 ```
 
-The collector saves match IDs and validated composition records continuously. It trains automatically once the 50,000-match floor is met, and again after each additional 25,000 eligible matches. The target is **100,000 unique matches**. The UI can also start/stop collection, import data, and train. Collection has an OS lock, so two processes cannot spend the same key's quota concurrently.
+The collector saves match IDs and validated composition records continuously. It trains automatically once the 50,000-match floor is met **within the 29-day training subset**, and again after each additional 25,000 trainable matches or as a model approaches expiry. Training runs alongside downloads. Fresh artifact metadata prevents unnecessary retraining when collection restarts. The target is **100,000 unique matches**. The UI distinguishes the 30-day analysis count from the 29-day training count and shows training progress from both CLI and browser jobs. Collection has an OS lock, so two processes cannot spend the same key's quota concurrently.
 
 ## Fresh installation
 
@@ -66,7 +66,7 @@ The official pipeline uses:
 
 No summoner names, Riot IDs, PUUIDs, raw API payloads, client passwords, or player telemetry are stored in the match database. Rank filters select **current ladder seed cohorts**; they do not establish historical participant rank at match time. Cohort sampling may differ from the entire ranked population. Collection is independent of the local live draft and performs no scouting.
 
-Downloads use application limits reported in Riot response headers, separately per routing host. `429 Retry-After` is honored; network/5xx errors back off; 401/403 stop with a safe message. Redirects are disabled. Interrupted IDs stay pending in SQLite. Keys are passed only in the `X-Riot-Token` header to allowlisted official HTTPS hosts.
+Downloads use application limits reported in Riot response headers, separately per routing host. `429 Retry-After` is honored; network/5xx errors back off; 401/403 stop with a safe message. Redirects are disabled. Interrupted IDs stay pending in SQLite. An anonymous traversal position resumes ladder discovery within a daily cycle without saving player identities or identity hashes. Ladder changes can shift positions, so it is a sampling cursor rather than an identity-exact checkpoint. Completed or day-old cycles refresh discovery; stored match IDs still prevent repeated detail downloads. Keys are passed only in the `X-Riot-Token` header to allowlisted official HTTPS hosts.
 
 At the development key's **100 requests per two minutes**, 100,000 match-detail calls alone require at least **33 hours 20 minutes**. Discovery, unavailable records, latency, and retries add time. A 24-hour development key cannot complete that target in one validity window. Renew the key in Riot's portal, update the local `.env`, then resume. The app reads the renewed key when a new collection job starts; it does not generate keys or solve CAPTCHAs. Applying for an appropriate personal/production key is documented in [compliance](docs/compliance.md).
 

@@ -24,6 +24,19 @@ def test_insufficient_real_data_blocks_training(tmp_path):
     assert not (tmp_path / "model.joblib").exists()
 
 
+def test_failed_retraining_preserves_the_existing_artifact(tmp_path, trained):
+    import shutil
+    path = tmp_path / "model.joblib"
+    shutil.copyfile(trained[0] / "model.joblib", path)
+    original = path.read_bytes()
+    store = Store(tmp_path)
+    with pytest.raises(ValueError, match="Model not ready"):
+        train(store, Settings())
+    assert path.read_bytes() == original
+    assert store.get_meta("training")["status"] == "failed"
+    assert Predictor(tmp_path).predict(Draft())["ready"]
+
+
 def test_training_masks_never_insert_unknown_champions(trained):
     _, store, _ = trained
     match = store.recent()[0]
@@ -106,6 +119,8 @@ def test_unsupported_regions_queues_patches_and_champions_not_guessed(trained):
 def test_temporal_splits_and_validation_metrics(trained):
     _, store, meta = trained
     report = meta["report"]
+    assert store.get_meta("training")["status"] == "complete"
+    assert meta["scope"] == {"region": "EUW1", "queue": 420, "patches": []}
     a, b = report["boundaries"].values()
     assert a < b
     rows = store.recent()
