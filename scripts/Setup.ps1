@@ -14,5 +14,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Project installation failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed' }
 & $Pnpm --filter league-draft-lab-ui build
 if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
-if (!(Test-Path '.env')) { Copy-Item '.env.example' '.env' }
+$taskPrivateDirectory = Join-Path $env:LOCALAPPDATA 'LeagueDraftLab'
+New-Item -ItemType Directory -Path $taskPrivateDirectory -Force | Out-Null
+$taskEnvPath = Join-Path $taskPrivateDirectory '.env'
+if (!(Test-Path -LiteralPath $taskEnvPath)) { Copy-Item '.env.example' $taskEnvPath }
+Write-Host "Private configuration: $taskEnvPath"
 Write-Host 'Setup complete. Run Start.cmd or .venv\Scripts\python.exe -m loldraft.cli serve'

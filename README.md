@@ -37,10 +37,11 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --no-deps -e .
 pnpm install --frozen-lockfile
 pnpm --filter league-draft-lab-ui build
-Copy-Item .env.example .env
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\LeagueDraftLab"
+Copy-Item .env.example "$env:LOCALAPPDATA\LeagueDraftLab\.env"
 ```
 
-Edit `.env` locally to set `RIOT_API_KEY`. Do not put a key in a frontend variable, a URL, an issue, a commit, a screenshot, or a shared log. `.env`, databases, client lockfiles, models, and logs are ignored by Git. The Python lockfile records the versions tested on this machine; `pyproject.toml` gives compatible dependency ranges for other environments.
+Edit `%LOCALAPPDATA%\LeagueDraftLab\.env` locally to set `RIOT_API_KEY`. Default private data lives in `%LOCALAPPDATA%\LeagueDraftLab\data`, outside a OneDrive-synced Desktop. An explicit project-local `.env` remains available for development; `LOL_ENV_FILE` can select a different local file. Do not put a key in a frontend variable, a URL, an issue, a commit, a screenshot, or a shared log. `.env`, databases, client lockfiles, models, and logs are ignored by Git. The Python lockfile records the versions tested on this machine; `pyproject.toml` gives compatible dependency ranges for other environments.
 
 Development:
 
@@ -144,3 +145,4 @@ scripts/                            # Setup helpers
 Source code is MIT licensed. Riot data, champion images, and trademarks retain their owners' rights and are subject to Riot's policies.
 
 **League Draft Lab is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.**
+

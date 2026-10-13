@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,7 +33,7 @@ class Config:
     queue: int = 420
     target_matches: int = 100_000
     min_matches: int = 50_000
-    riot_key: str = ""
+    riot_key: str = field(default="", repr=False)
     lcu_enabled: bool = False
     riot_live_approved: bool = False
     lcu_directory: str = ""
@@ -41,11 +41,19 @@ class Config:
 
     @classmethod
     def load(cls):
-        values = {**os.environ, **dotenv_values(Path.cwd() / ".env", encoding="utf-8-sig")}
+        # Default state is outside OneDrive/Desktop source checkouts. Local .env remains a dev override.
+        if os.name == "nt":
+            state_dir = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData/Local")) / "LeagueDraftLab"
+        else:
+            state_dir = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local/state")) / "LeagueDraftLab"
+        env_path = Path(os.environ["LOL_ENV_FILE"]) if os.getenv("LOL_ENV_FILE") else (
+            Path.cwd() / ".env" if (Path.cwd() / ".env").exists() else state_dir / ".env"
+        )
+        values = {**os.environ, **dotenv_values(env_path, encoding="utf-8-sig")}
         def get(key, default=""):
             return values.get(key) or default
         return cls(
-            data_dir=Path(get("LOL_DATA_DIR", "data")),
+            data_dir=Path(get("LOL_DATA_DIR", str(state_dir / "data"))),
             region=get("LOL_REGION", "EUW1").upper(),
             queue=int(get("LOL_QUEUE", "420")),
             target_matches=int(get("LOL_TARGET_MATCHES", "100000")),
