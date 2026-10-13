@@ -1,0 +1,7 @@
+packages:
+  - frontend
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true
+storeDir: ../.pnpm-store
+cacheDir: ../.cache/pnpm
