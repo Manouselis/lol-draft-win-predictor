@@ -103,12 +103,14 @@ def _fit(store, settings, *, minimum=50000, progress=None):
                    if m["started_at"] >= cutoff_ts() + 86400]
         if len(matches) < minimum:
             raise ValueError(f"Model not ready: need {minimum:,} unique matches within the last 29 days; have {len(matches):,}.")
-        a, b = int(len(matches) * .6), int(len(matches) * .8)
+        # Keep the newest 10% for calibration/test, allowing earlier games on a new patch to fit.
+        # At the production floor, each held-out cohort needs at least 2,000 distinct matches.
+        a, b = int(len(matches) * .9), int(len(matches) * .95)
         split_a, split_b = matches[a]["started_at"], matches[b]["started_at"]
         fit = [m for m in matches if m["started_at"] < split_a]
         calibration = [m for m in matches if split_a <= m["started_at"] < split_b]
         test = [m for m in matches if m["started_at"] >= split_b]
-        if min(map(len, (fit, calibration, test))) < max(30, minimum // 10):
+        if min(map(len, (fit, calibration, test))) < max(30, minimum // 25):
             raise ValueError("Not enough temporally separated matches; collect more distinct match dates")
         if any(len({m["blue_win"] for m in group}) < 2 for group in (fit, calibration, test)):
             raise ValueError("Each chronological cohort must contain both outcomes")
@@ -153,6 +155,7 @@ def _fit(store, settings, *, minimum=50000, progress=None):
                   "boundaries": {"train_end_exclusive": split_a, "calibration_end_exclusive": split_b},
                   "baseline_blue_win_rate": baseline, "unique_matches": len(matches),
                   "sample_weight_half_life_days": 7, "training_masks_per_match": 8,
+                  "split_policy": "chronological 90/5/5; timestamps grouped",
                   "method": "L2 logistic regression + chronological sigmoid calibration"}
         for total in (0, 2, 4, 6, 8, 10):
             progress(f"Evaluating {total}/10 visible champions on {len(test):,} held-out matches")
@@ -246,9 +249,10 @@ class Predictor:
         rare = [c for c in ids if a["champion_support"].get(c, 0) < 20]
         if rare:
             return {**unavailable, "reason": "Insufficient recent historical support for visible champion IDs: " + ", ".join(map(str, rare))}
+        baseline_blue = a["patch_baselines"].get(draft.patch, a["baseline"])
         def probability(b, r):
             if not b and not r:
-                return a["patch_baselines"].get(draft.patch, a["baseline"])
+                return baseline_blue
             # Unknown patch means a recency-weighted mixture of covered patches, never an invented patch.
             patches = {draft.patch: 1} if draft.patch else meta["patch_weights"]
             rows = [allowed_features(features(b, r, draft.region, draft.queue, patch), a["supported"])
@@ -300,7 +304,7 @@ class Predictor:
                 "known": total, "training_matches": meta["report"]["split"]["training"],
                 "dataset_matches": meta["matches"], "version": meta["version"],
                 "tentative": include_hovers and any(pick.state == "hover" for pick in draft.allies + draft.enemies),
-                "baseline": 1 - a["baseline"] if draft.side == "red" else .5 if draft.side == "unknown" else a["baseline"],
+                "baseline": 1 - baseline_blue if draft.side == "red" else .5 if draft.side == "unknown" else baseline_blue,
                 "effects": sorted(effects, key=lambda e: abs(e["change"]), reverse=True)[:4],
                 "statistics": sorted(stats, key=lambda s: s["matches"], reverse=True)[:5],
                 "validation_warning": meta["report"]["validation_warning"]}

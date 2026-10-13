@@ -28,13 +28,15 @@ Hover predictions and locked-only predictions run independently. Conflicting hov
 
 ## Fitting and calibration
 
-L2 logistic regression, fixed C=0.1, liblinear solver, deterministic seed. Time weighting has a seven-day half-life. The initial 60% of chronologically ordered unique matches fit the estimator. The next 20% fit a sigmoid calibrator over estimator logits. The last 20% are untouched final evaluation. Timestamp ties stay together. Nonconvergent fits do not publish an artifact.
+L2 logistic regression, fixed C=0.1, liblinear solver, deterministic seed. Time weighting has a seven-day half-life. The initial 90% of chronologically ordered unique matches fit the estimator. The next 5% fit a sigmoid calibrator over estimator logits. The last 5% are untouched final evaluation. Timestamp ties stay together. Nonconvergent fits do not publish an artifact.
+
+The 90/5/5 policy keeps chronological separation while allowing earlier matches from a new patch into fitting. At the 50,000-match production floor, calibration and test must each contain at least 2,000 distinct matches; timestamp ties that leave smaller cohorts block publication. A very new patch may still be absent from fitting and remains unsupported until enough outcomes arrive. Smaller held-out fractions trade evaluation precision for more recent training coverage; all final cohort counts are reported.
 
 The baseline is the weighted historical blue win rate of the fit cohort. It is not forced to 50%. Empty drafts return the baseline rather than treating a model intercept as measured evidence. A specific supported patch has its own empirical weighted baseline. For an unknown side and no visible picks, equal weighting of the two sides mathematically yields 50%; that is a stated mixture assumption, not a universal baseline.
 
 ## Evaluation and uncertainty
 
-Evaluation reports Brier score, log loss, equal-width calibration bins, and expected calibration error at 0/2/4/6/8/10 visible champions. Each group uses the same independent test matches with deterministic masks. Baseline scores use the same test outcomes. Results across reveal groups share matches and must not be treated as independent evidence. A warning flags groups whose model Brier score is more than 0.002 worse than baseline; this flag is not a hypothesis test or a confidence threshold.
+Evaluation reports Brier score, log loss, equal-width calibration bins, and expected calibration error at 0/2/4/6/8/10 visible champions. Each group uses the same held-out test matches with deterministic masks. Baseline scores use the same test outcomes. Results across reveal groups share matches and must not be treated as independent evidence. A warning flags groups whose model Brier score is more than 0.002 worse than baseline; this flag is not a hypothesis test or a confidence threshold.
 
 The displayed band is the 95% Wilson interval of observed wins within the corresponding held-out probability bin at the nearest evaluated reveal count. It describes aggregate calibration uncertainty. It is not an individual-match probability confidence interval, does not include model parameter uncertainty, and is not validated separately for odd reveal counts, each champion combination, each rank, or each patch. No band is given for unknown side. Users should inspect sample counts and calibration tables.
 

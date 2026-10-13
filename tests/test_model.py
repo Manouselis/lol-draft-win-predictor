@@ -121,6 +121,7 @@ def test_temporal_splits_and_validation_metrics(trained):
     report = meta["report"]
     assert store.get_meta("training")["status"] == "complete"
     assert meta["scope"] == {"region": "EUW1", "queue": 420, "patches": []}
+    assert report["split"] == {"training": 540, "calibration": 30, "test": 30}
     a, b = report["boundaries"].values()
     assert a < b
     rows = store.recent()
@@ -133,6 +134,23 @@ def test_temporal_splits_and_validation_metrics(trained):
         assert np.isfinite(group["model"]["log_loss"])
         assert 0 <= group["model"]["ece"] <= 1
         assert group["model"]["matches"] == report["split"]["test"]
+
+
+def test_new_patch_can_fit_without_using_later_calibration_or_test_matches(tmp_path, trained):
+    store = Store(tmp_path)
+    for index, match in enumerate(trained[1].recent()):
+        match["patch"] = "16.19" if index < 480 else "16.20"
+        store.insert(match)
+    meta = train(store, Settings(), minimum=300)
+    assert meta["patches"] == {"16.19": 480, "16.20": 60}
+    first, second = meta["report"]["boundaries"].values()
+    rows = store.recent()
+    fit = [m for m in rows if m["started_at"] < first]
+    calibration = [m for m in rows if first <= m["started_at"] < second]
+    test = [m for m in rows if m["started_at"] >= second]
+    assert max(m["started_at"] for m in fit) < min(m["started_at"] for m in calibration)
+    assert max(m["started_at"] for m in calibration) < min(m["started_at"] for m in test)
+    assert Predictor(tmp_path).predict(Draft(patch="16.20"))["ready"]
 
 
 def test_expired_and_synthetic_models_rejected(tmp_path, trained):
