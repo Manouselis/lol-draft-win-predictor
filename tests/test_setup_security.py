@@ -93,3 +93,48 @@ def test_background_child_arguments_never_contain_the_key(config):
     command = child_command(config, 8765)
     assert TEST_KEY not in " ".join(command)
     assert str(config.env_file) in command
+
+
+def test_raw_upload_is_private_and_deleted_after_processing(config, monkeypatch):
+    import threading
+    private = config.data_dir.parent / "private-profile"
+    monkeypatch.setattr("loldraft.api.private_state_dir", lambda: private)
+    processed = threading.Event()
+    seen = []
+    def imported(path, *_args, **_kwargs):
+        seen.append(path)
+        assert path.parent == private / "imports"
+        assert path.read_bytes() == b'{"SYNTHETIC_PRIVATE_FIELD":true}'
+        processed.set()
+        return {"accepted": 0}
+    monkeypatch.setattr("loldraft.ingestion.import_file", imported)
+    app = create_app(config)
+    with TestClient(app) as client:
+        response = client.post("/api/import", files={"file": ("test.json", b'{"SYNTHETIC_PRIVATE_FIELD":true}', "application/json")})
+        assert response.status_code == 200
+        assert processed.wait(2)
+        import time
+        for _ in range(20):
+            if not seen[0].exists():
+                break
+            time.sleep(.01)
+        assert not seen[0].exists()
+        assert not (config.data_dir / "imports").exists()
+
+
+def test_quit_requires_token_and_does_not_kill_training(config):
+    from loldraft.locking import exclusive
+    called = []
+    app = create_app(config)
+    app.state.shutdown_callback = lambda: called.append(True)
+    with TestClient(app) as client:
+        token = client.get("/api/state").json()["configuration"]["setup_token"]
+        assert client.post("/api/quit", json={}).status_code == 403
+        with exclusive(config.data_dir / "training.lock"):
+            assert client.post("/api/quit", json={}, headers={"X-League-Draft-Token": token}).status_code == 409
+            assert called == []
+        response = client.post("/api/quit", json={}, headers={"X-League-Draft-Token": token})
+        assert response.status_code == 200
+        assert called == [True]
+        assert app.state.runtime.shutting_down
+        assert (config.data_dir / "collection.stop").exists()

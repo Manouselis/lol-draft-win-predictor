@@ -6,9 +6,11 @@ import json
 import subprocess
 import sys
 import zipfile
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
 def main():
@@ -47,15 +49,16 @@ def main():
                      ROOT / "requirements.lock", ROOT / "scripts/desktop_entry.py"])
     manifest = {str(path.relative_to(ROOT)).replace("\\", "/"): hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in inputs if path.is_file()}
-    (bundle / "BUILD-INFO.json").write_text(json.dumps({"version": "0.2.0", "inputs": manifest}, indent=2), encoding="utf-8")
+    (bundle / "BUILD-INFO.json").write_text(json.dumps({"version": VERSION, "inputs": manifest}, indent=2), encoding="utf-8")
     (bundle / "READ-ME.txt").write_text(
-        "League Draft Lab 0.2.0\n\nExtract the whole folder, then double-click LeagueDraftLab.exe.\n"
+        f"League Draft Lab {VERSION}\n\nExtract the whole folder, then double-click LeagueDraftLab.exe.\n"
         "No Python, Node, administrator access, or installer is required.\n"
         "First use: Settings -> Connect Riot -> Validate key & start collecting.\n"
         "Keep the folder together: _internal contains the runtime.\n"
         "The browser shows the match database and private key file paths in Settings.\n"
         "The app needs an awake PC, Internet, a running collector and a valid key.\n"
         "It does not start automatically when Windows boots.\n"
+        "Settings -> Quit app & save progress closes the background server.\n"
         "Live predictions remain disabled pending Riot review.\n"
         "This prototype does not include a key, match dataset, or trained model.\n", encoding="utf-8")
     args.output.parent.mkdir(parents=True, exist_ok=True)

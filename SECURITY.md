@@ -12,6 +12,11 @@ origin checks. Responses never echo validation inputs for that endpoint. The UI
 cannot choose an arbitrary credential file path. The app also sends a restrictive
 Content Security Policy, disallows framing, and checks loopback host names.
 
+Raw JSON imports are processed in private profile temporary storage and deleted after
+processing, so unfiltered player identifiers do not pass through the synced data folder.
+Only whitelisted match facts enter the database. Quitting the background server also
+requires the local request token and refuses to quit during active training.
+
 Match data may live in the checkout's data/ directory. That directory, .env files,
 models, logs, runtime downloads, and databases are Git-ignored. A cloud-synced
 checkout can sync its local match data independently of Git. The key profile remains

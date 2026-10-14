@@ -29,3 +29,13 @@ def test_blank_template_is_allowed_but_private_runtime_artifacts_are_blocked():
 def test_cpp_highs_symbols_are_not_github_tokens_but_standalone_tokens_are():
     assert not guard.contains_secret(b"_Z17highs_" + b"Symbol" * 10)
     assert guard.contains_secret(b"token=" + b"gh" + b"p_" + b"a" * 36 + b";")
+
+
+def test_private_files_inside_frozen_internal_folder_are_still_blocked(tmp_path):
+    archive = tmp_path / "SYNTHETIC-internal.zip"
+    with zipfile.ZipFile(archive, "w") as package:
+        package.writestr("App/_internal/data/matches.json", b"SYNTHETIC_MATCH")
+        package.writestr("App/_internal/.env", b"SYNTHETIC_KEY")
+        package.writestr("App/_internal/base_library.zip", b"PUBLIC_RUNTIME")
+    _, findings = guard.scan(archive=archive)
+    assert findings == ["App/_internal/data/matches.json", "App/_internal/.env"]

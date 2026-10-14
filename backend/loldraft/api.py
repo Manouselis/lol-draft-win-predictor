@@ -8,7 +8,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, SecretStr
@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 
 from .champions import catalog
-from .config import Config
+from .config import Config, private_state_dir
 from .locking import is_locked
 from .runtime import Runtime
 from .schemas import Draft, Settings
@@ -47,7 +47,7 @@ def create_app(config=None):
         except asyncio.CancelledError:
             pass
 
-    app = FastAPI(title="League Draft Lab", version="0.2.0", lifespan=lifespan,
+    app = FastAPI(title="League Draft Lab", version="0.2.1", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.runtime = runtime
 
@@ -70,7 +70,7 @@ def create_app(config=None):
                 trusted = False
             if not trusted:
                 return JSONResponse({"detail": "Untrusted origin"}, status_code=403)
-        if request.url.path == "/api/setup/key":
+        if request.url.path in ("/api/setup/key", "/api/quit"):
             if request.headers.get("content-type", "").split(";", 1)[0] != "application/json":
                 return JSONResponse({"detail": "JSON request required"}, status_code=415)
             if not secrets.compare_digest(request.headers.get("x-league-draft-token", ""), runtime.setup_token):
@@ -89,7 +89,7 @@ def create_app(config=None):
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "application": "LeagueDraftLab", "version": "0.2.0", "historical_window_days": 30}
+        return {"status": "ok", "application": "LeagueDraftLab", "version": "0.2.1", "historical_window_days": 30}
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
@@ -121,7 +121,7 @@ def create_app(config=None):
     async def events(request: Request):
         async def stream():
             previous = None
-            while not await request.is_disconnected():
+            while not runtime.shutting_down and not await request.is_disconnected():
                 payload = json.dumps(await asyncio.to_thread(runtime.state), separators=(",", ":"))
                 if payload != previous:
                     yield "data: " + payload + "\n\n"
@@ -206,6 +206,19 @@ def create_app(config=None):
         (config.data_dir / "collection.stop").write_text("stop", encoding="utf-8")
         return {"status": "stopping", "detail": "Collector will save progress and stop. Training finishes safely."}
 
+    @app.post("/api/quit")
+    def quit_app(background: BackgroundTasks):
+        callback = getattr(app.state, "shutdown_callback", None)
+        if not callback:
+            raise HTTPException(409, "This server was started in a terminal. Close its server window to quit.")
+        if is_locked(config.data_dir / "training.lock"):
+            raise HTTPException(409, "Wait for training to finish before quitting")
+        runtime.shutting_down = True
+        runtime.stop.set()
+        (config.data_dir / "collection.stop").write_text("stop", encoding="utf-8")
+        background.add_task(callback)
+        return {"status": "closing", "message": "App is closing and saving progress. Run Start.cmd to reopen."}
+
     @app.post("/api/import")
     async def import_matches(file: UploadFile = File(...)):
         from .ingestion import import_file
@@ -213,8 +226,10 @@ def create_app(config=None):
             raise HTTPException(400, "Choose legally obtained Match-V5 JSON or JSONL")
         if runtime.job["status"] == "running":
             raise HTTPException(409, "Wait for the running task")
-        imports = config.data_dir / "imports"
-        imports.mkdir(exist_ok=True)
+        # Unprocessed Match-V5 JSON may contain player identifiers. Only sanitized
+        # records belong in the potentially cloud-synced repository database.
+        imports = private_state_dir() / "imports"
+        imports.mkdir(parents=True, exist_ok=True)
         temp = tempfile.NamedTemporaryFile(dir=imports, suffix=Path(file.filename).suffix, delete=False)
         path = Path(temp.name)
         size = 0

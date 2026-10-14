@@ -18,6 +18,9 @@ distribution artifacts. Checks are point-in-time observations, not a guarantee.
   writes, and no response echo or browser persistence.
 - Added CSP and frame protections. A production HTTP request cannot use the test-only
   testserver host allowance. Malformed Origin ports fail closed.
+- Raw uploaded Match-V5 JSON is processed outside the repo in private temporary storage
+  and deleted after processing. Only sanitized records reach a cloud-synced database.
+  A token-protected Quit button stops the background server without killing training.
 - Added staged/history Git guards and CI scans for Riot keys and private artifacts.
   GitHub native secret scanning and push protection were verified enabled; the open
   secret-alert count was zero at review time.

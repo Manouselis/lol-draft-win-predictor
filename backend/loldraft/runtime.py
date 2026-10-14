@@ -33,6 +33,7 @@ class Runtime:
         self.cached_stats = None
         self.stats_time = 0
         self.setup_token = secrets.token_urlsafe(32)
+        self.shutting_down = False
 
     def live_update(self, draft, reset=False):
         with self.lock:

@@ -32,7 +32,7 @@ in the background after the launch window closes.
 Downloads require an awake, connected PC, a running collector and a valid key. Sleep
 pauses work; shutdown ends the processes. The app is not installed as a Windows
 service or sign-in task: **run Start.cmd again after a reboot**. Closing the browser
-alone does not stop the server. Use **Stop & save progress** to stop downloads.
+alone does not stop the server. Use **Stop & save progress** to stop downloads, or **Settings → Quit app & save progress** to close the background server. Quitting is disabled during training.
 
 A source installation with an existing .venv and built frontend uses those local
 files instead of downloading the bundle. Developer setup remains below.
@@ -48,7 +48,7 @@ The key stays in the separate private **%LOCALAPPDATA%\LeagueDraftLab\.env** pro
 not the checkout. The launcher reuses an existing user profile if a restricted
 terminal redirects LOCALAPPDATA, and pins that profile for its child server. An
 explicit LOL_ENV_FILE is available for developer CLI use; Start.cmd deliberately
-uses the private user profile. Logs also remain in that private profile. The portable
+uses the private user profile. Logs and raw-import temporary files also remain in that private profile. Raw uploads are deleted after processing; only sanitized match facts enter the repo database. The portable
 ZIP, source ZIP and GitHub repository contain no key, real dataset or trained model.
 
 For reproducible public research, share schema/collection code and a separately

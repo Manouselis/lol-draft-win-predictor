@@ -57,7 +57,7 @@ def launch(config, *, port=8765, collect=False, browser=True):
         health = local_request(url + "/api/health")
     except (OSError, ValueError):
         health = None
-    if health and (health.get("application") != "LeagueDraftLab" or health.get("version") != "0.2.0"):
+    if health and (health.get("application") != "LeagueDraftLab" or health.get("version") != "0.2.1"):
         raise RuntimeError("An older app is using port 8765. Close its server window, then start again.")
     if health is None:
         logs = config.env_file.parent / "logs"
@@ -118,7 +118,10 @@ def main():
             sys.stdout = sys.stderr = (logs / "desktop-server.log").open("a", encoding="utf-8", buffering=1)
         import uvicorn
         from .api import create_app
-        uvicorn.run(create_app(config), host="127.0.0.1", port=args.port, access_log=False)
+        app = create_app(config)
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, access_log=False))
+        app.state.shutdown_callback = lambda: setattr(server, "should_exit", True)
+        server.run()
     else:
         launch(config, port=args.port, collect=args.collect, browser=not args.no_browser)
 

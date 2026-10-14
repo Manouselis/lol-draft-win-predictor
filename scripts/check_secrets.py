@@ -46,8 +46,15 @@ def scan(root=ROOT, *, staged=False, history=False, archive=None):
                 # files may never appear beside the executable or in the source archive.
                 parts = PurePosixPath(entry.filename).parts
                 bundled_library = "_internal" in parts
-                if ((private_file(entry.filename) and not bundled_library) or
-                        contains_secret(package.read(entry))):
+                private = private_file(entry.filename)
+                if bundled_library:
+                    relative = parts[parts.index("_internal") + 1:]
+                    # Vendor sample-data folders are public runtime resources, but
+                    # internal/private files must not be exempt from artifact checks.
+                    filename_private = private_file(PurePosixPath(entry.filename).name)
+                    private = (filename_private and relative != ("base_library.zip",)) or (
+                        bool(relative) and relative[0] in ("data", "models", "logs", "imports"))
+                if private or contains_secret(package.read(entry)):
                     findings.append(entry.filename)
         return checked, findings
     if not git:
