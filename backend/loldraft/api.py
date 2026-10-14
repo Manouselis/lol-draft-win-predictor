@@ -3,13 +3,17 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import secrets
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 
 from .champions import catalog
 from .config import Config
@@ -17,11 +21,15 @@ from .locking import is_locked
 from .runtime import Runtime
 from .schemas import Draft, Settings
 
-PROJECT = Path(__file__).resolve().parents[2]
+PROJECT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
 
 
 class Mode(BaseModel):
     mode: str
+
+
+class KeySetup(BaseModel):
+    key: SecretStr
 
 
 def create_app(config=None):
@@ -39,7 +47,8 @@ def create_app(config=None):
         except asyncio.CancelledError:
             pass
 
-    app = FastAPI(title="League Draft Lab", version="0.1.0", lifespan=lifespan, docs_url="/api/docs")
+    app = FastAPI(title="League Draft Lab", version="0.2.0", lifespan=lifespan,
+                  docs_url=None, redoc_url=None, openapi_url=None)
     app.state.runtime = runtime
 
     @app.middleware("http")
@@ -47,23 +56,62 @@ def create_app(config=None):
         # Fixed loopback bind + host/origin checks prevent drive-by sites from mutating local state.
         from starlette.responses import JSONResponse
         hostname = request.url.hostname
-        if hostname not in ("127.0.0.1", "localhost", "testserver"):
+        test_client = request.client and request.client.host == "testclient"
+        if hostname not in ("127.0.0.1", "localhost") and not (test_client and hostname == "testserver"):
             return JSONResponse({"detail": "Loopback host required"}, status_code=403)
         origin = request.headers.get("origin")
         if origin:
             from urllib.parse import urlparse
-            parsed = urlparse(origin)
-            if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost") or parsed.port not in (8765, 5173):
+            try:
+                parsed = urlparse(origin)
+                trusted = (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost")
+                           and parsed.port in (request.url.port, 8765, 5173))
+            except ValueError:
+                trusted = False
+            if not trusted:
                 return JSONResponse({"detail": "Untrusted origin"}, status_code=403)
+        if request.url.path == "/api/setup/key":
+            if request.headers.get("content-type", "").split(";", 1)[0] != "application/json":
+                return JSONResponse({"detail": "JSON request required"}, status_code=415)
+            if not secrets.compare_digest(request.headers.get("x-league-draft-token", ""), runtime.setup_token):
+                return JSONResponse({"detail": "Open the local app to save a key"}, status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' https://ddragon.leagueoflegends.com data:; connect-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        )
         response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api") else "no-cache"
         return response
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "historical_window_days": 30}
+        return {"status": "ok", "application": "LeagueDraftLab", "version": "0.2.0", "historical_window_days": 30}
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        if request.url.path == "/api/setup/key":
+            from starlette.responses import JSONResponse
+            return JSONResponse({"detail": "Provide the API key in the key field."}, status_code=422)
+        return await request_validation_exception_handler(request, exc)
+
+    @app.post("/api/setup/key")
+    def setup_key(body: KeySetup):
+        from .configuration import save_key, validate_key
+        if is_locked(config.data_dir / "collection.lock"):
+            raise HTTPException(409, "Stop collection before replacing the key")
+        key = body.key.get_secret_value().strip()
+        try:
+            validate_key(key, runtime.settings.region)
+            save_key(config, key)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        except OSError:
+            raise HTTPException(409, "Cannot write the private profile here. Start the app from Windows Explorer.") from None
+        return {"saved": True, "message": "Riot accepted the key. It is saved only in your local private profile."}
 
     @app.get("/api/state")
     def state():
@@ -141,7 +189,7 @@ def create_app(config=None):
     def collect_matches():
         from .cli import run_collection
         # Read an updated key without ever returning it to the browser.
-        fresh = Config.load()
+        fresh = Config.load(env_file=config.env_file)
         config.riot_key = fresh.riot_key
         if not config.riot_key:
             raise HTTPException(409, "Set RIOT_API_KEY in .env, then retry")

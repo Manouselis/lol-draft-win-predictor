@@ -14,10 +14,33 @@ def test_renewed_key_is_read_without_stale_environment(monkeypatch, tmp_path):
 
 
 def test_default_private_state_is_outside_desktop(monkeypatch, tmp_path):
+    from pathlib import Path
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "SYNTHETIC-home"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-state"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "local-state"))
     monkeypatch.delenv("LOL_DATA_DIR", raising=False)
     monkeypatch.delenv("LOL_ENV_FILE", raising=False)
     assert Config.load().data_dir == tmp_path / "local-state/LeagueDraftLab/data"
     assert "SYNTHETIC_SECRET" not in repr(Config(tmp_path, riot_key="SYNTHETIC_SECRET"))
+
+
+def test_redirected_windows_environment_reuses_saved_profile(monkeypatch, tmp_path):
+    import os
+    from pathlib import Path
+    import pytest
+    if os.name != "nt":
+        pytest.skip("Windows profile redirect regression")
+    home = tmp_path / "SYNTHETIC-home"
+    profile = home / "AppData/Local/LeagueDraftLab"
+    profile.mkdir(parents=True)
+    (profile / ".env").write_text("RIOT_API_KEY=SYNTHETIC_SAVED_KEY\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "SYNTHETIC-sandbox"))
+    monkeypatch.delenv("LOL_ENV_FILE", raising=False)
+    monkeypatch.delenv("LOL_DATA_DIR", raising=False)
+    config = Config.load()
+    assert config.riot_key == "SYNTHETIC_SAVED_KEY"
+    assert config.env_file == (profile / ".env").resolve()
+    assert config.data_dir == profile / "data"

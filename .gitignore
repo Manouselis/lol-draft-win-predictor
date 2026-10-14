@@ -21,3 +21,9 @@ frontend/dist/
 lockfile
 .DS_Store
 Thumbs.db
+.desktop/
+build/
+dist/
+*.spec
+*.zip
+security-audit*.json

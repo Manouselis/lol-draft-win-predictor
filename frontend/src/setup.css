@@ -1,0 +1,13 @@
+.setup-panel { margin-bottom: 24px; }
+.setup-steps { display: flex; gap: 24px; flex-wrap: wrap; margin: 0 0 24px; color: #a5b1c3; font-size: 13px; }
+.setup-steps > span { display: flex; align-items: center; gap: 10px; }
+.setup-steps b { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid #35544b; border-radius: 50%; color: #a4f2d0; }
+.setup-steps a { display: flex; align-items: center; gap: 6px; color: #a4f2d0; }
+.key-input-label { display: flex; flex-direction: column; gap: 10px; color: #d6dce5; font-size: 13px; max-width: 680px; margin-bottom: 20px; }
+.key-input-label input { background: #111824; border: 1px solid #354154; border-radius: 8px; color: #e5ecf5; padding: 14px; width: 100%; }
+.key-input-label input:focus { outline: 2px solid #a4f2d0; outline-offset: 2px; }
+.local-files { margin-top: 24px; padding-top: 20px; border-top: 1px solid #283345; display: grid; gap: 16px; }
+.local-files > div { display: grid; gap: 8px; }
+.local-files span { color: #96a4b7; font-size: 12px; }
+.local-files code { color: #d6e1ee; font-size: 12px; overflow-wrap: anywhere; }
+.setup-success { color: #a4f2d0; margin-top: 14px; font-size: 13px; }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+import secrets
 
 from .config import now_ts
 from .lcu import LcuMonitor, parse_session
@@ -31,6 +32,7 @@ class Runtime:
         self.stop = threading.Event()
         self.cached_stats = None
         self.stats_time = 0
+        self.setup_token = secrets.token_urlsafe(32)
 
     def live_update(self, draft, reset=False):
         with self.lock:
@@ -102,7 +104,10 @@ class Runtime:
                     "integration": {"status": self.monitor.status, "message": self.monitor.message,
                                     "client_detected": self.monitor.available,
                                     "live_enabled": self.config.lcu_enabled and self.config.riot_live_approved},
-                    "api_key_configured": bool(self.config.riot_key), "minimum_matches": self.config.min_matches}
+                    "api_key_configured": bool(self.config.riot_key), "minimum_matches": self.config.min_matches,
+                    "configuration": {"env_file": str(self.config.env_file) if self.config.env_file else None,
+                                      "database": str(self.config.data_dir / "matches.sqlite3"),
+                                      "data_directory": str(self.config.data_dir), "setup_token": self.setup_token}}
 
     def start_job(self, kind, function):
         with self.lock:

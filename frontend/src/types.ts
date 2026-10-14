@@ -16,6 +16,7 @@ export type AppState = {
   dataset: { matches: number; training_matches: number; aging_matches: number; stored_total: number; patches: Record<string, number>; window_days: number; cutoff: number; last_refresh: number | null; oldest: number | null; newest: number | null; pending_downloads: number };
   model: null | { version: string; trained_at: number; matches: number; patches: Record<string, number>; expires_at: number; report: { groups: Record<string, { model: Metrics; baseline: Metrics }>; split: Record<string, number>; validation_warning: boolean; baseline_blue_win_rate: number } };
   settings: Settings; minimum_matches: number; api_key_configured: boolean;
+  configuration: { env_file: string | null; database: string; data_directory: string; setup_token: string };
   integration: { status: string; message: string; client_detected: boolean; live_enabled: boolean };
   job: { status: string; kind: string | null; message: string; result?: unknown };
   collection: null | { status: string; message?: string; updated_at: number };

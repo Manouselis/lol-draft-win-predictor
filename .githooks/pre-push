@@ -1,0 +1,11 @@
+#!/bin/sh
+cd "$(git rev-parse --show-toplevel)" || exit 1
+if [ -x .venv/Scripts/python.exe ]; then
+  exec .venv/Scripts/python.exe scripts/check_secrets.py --history
+elif command -v python3 >/dev/null 2>&1; then
+  exec python3 scripts/check_secrets.py --history
+elif command -v python >/dev/null 2>&1; then
+  exec python scripts/check_secrets.py --history
+fi
+echo "Security check needs Python. Do not bypass it to push credentials." >&2
+exit 1

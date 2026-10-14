@@ -6,25 +6,61 @@ A local Windows-friendly League of Legends composition research app: Python, SQL
 
 The automatic integration is disabled pending Riot review of this specific use case. Use manual mode for offline composition analysis and fixture replay for integration testing. A valid developer key is API authentication, not Riot approval of the product or live predictions. See [compliance](docs/compliance.md).
 
-## Start the installed application
+## Windows: clone and double-click
 
-From PowerShell in this project directory:
+Clone this repository, then double-click **Start.cmd**. On a fresh checkout it downloads
+our self-contained Windows x64 build from this repository's GitHub Release, checks its
+pinned SHA-256, and opens the app. Python, Node, pnpm and administrator access are not
+needed for this path. Internet is needed for the initial download and Riot collection.
+No PowerShell execution-policy or Windows security settings are changed.
 
-```powershell
-.\.venv\Scripts\python.exe -m loldraft.cli serve
-```
+Alternatively, download the Windows ZIP from [Releases](https://github.com/Manouselis/lol-draft-win-predictor/releases),
+extract the **whole folder**, and double-click **LeagueDraftLab.exe**. Keep `_internal`
+beside the executable. This research prototype is not code-signed. Do not bypass a
+Windows/browser security warning for an untrusted download.
 
-Open **http://127.0.0.1:8765**. The built frontend is served by the Python process; a separate frontend server is not needed. `Ctrl+C` stops the foreground server.
+On first use, **Settings → Connect Riot** links to Riot's developer portal. Paste a
+key into the masked local field and click **Validate key & start collecting**. The
+backend validates it with Riot, saves it privately, clears the field, and starts
+collection. Renew expired keys through the same screen. No .env editing is required.
 
-Double-click **Start.cmd** to launch the same service and open the browser. Existing server instances are reused. The local service binds only to `127.0.0.1`. There is no cloud deployment or paid service.
+The app opens at **http://127.0.0.1:8765**. **Collect.cmd** opens the app and resumes
+collection. **Start.cmd** also resumes a collection interrupted by a stopped process;
+a deliberately stopped collection remains stopped until resumed. The server runs
+in the background after the launch window closes.
 
-In a second PowerShell window, start or resume collection:
+Downloads require an awake, connected PC, a running collector and a valid key. Sleep
+pauses work; shutdown ends the processes. The app is not installed as a Windows
+service or sign-in task: **run Start.cmd again after a reboot**. Closing the browser
+alone does not stop the server. Use **Stop & save progress** to stop downloads.
 
-```powershell
-.\.venv\Scripts\python.exe -m loldraft.cli collect --auto-train
-```
+A source installation with an existing .venv and built frontend uses those local
+files instead of downloading the bundle. Developer setup remains below.
 
-The collector saves match IDs and validated composition records continuously. It trains automatically once the 50,000-match floor is met **within the 29-day training subset**, and again after each additional 25,000 trainable matches or as a model approaches expiry. Training runs alongside downloads. Fresh artifact metadata prevents unnecessary retraining when collection restarts. The target is **100,000 unique matches**. The UI distinguishes the 30-day analysis count from the 29-day training count and shows training progress from both CLI and browser jobs. Collection has an OS lock, so two processes cannot spend the same key's quota concurrently.
+## Where your files are stored
+
+When opened through a repository's Start.cmd, the match database is
+**data/matches.sqlite3 inside that checkout**. Data, model artifacts and download
+cursors remain Git-ignored. Settings displays the actual active path. A cloud-synced
+checkout can sync its data independently of Git; choose an unsynced folder if desired.
+
+The key stays in the separate private **%LOCALAPPDATA%\LeagueDraftLab\.env** profile,
+not the checkout. The launcher reuses an existing user profile if a restricted
+terminal redirects LOCALAPPDATA, and pins that profile for its child server. An
+explicit LOL_ENV_FILE is available for developer CLI use; Start.cmd deliberately
+uses the private user profile. Logs also remain in that private profile. The portable
+ZIP, source ZIP and GitHub repository contain no key, real dataset or trained model.
+
+For reproducible public research, share schema/collection code and a separately
+reviewed versioned export rather than a continually changing SQLite file. GitHub
+[recommends separate storage for large databases](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github).
+See [security notes](SECURITY.md) and the [security review](docs/security-review.md).
+
+The collector trains automatically once the **29-day subset** reaches 50,000 unique
+real matches, then after 25,000 additional trainable matches or near model expiry.
+Training runs alongside downloads. The default collection target is 100,000. The
+UI distinguishes 30-day analysis counts from 29-day training counts. An OS lock
+prevents duplicate collectors from spending the same key's quota.
 
 ## Fresh installation
 
@@ -41,7 +77,7 @@ New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\LeagueDraftLab"
 Copy-Item .env.example "$env:LOCALAPPDATA\LeagueDraftLab\.env"
 ```
 
-Edit `%LOCALAPPDATA%\LeagueDraftLab\.env` locally to set `RIOT_API_KEY`. Default private data lives in `%LOCALAPPDATA%\LeagueDraftLab\data`, outside a OneDrive-synced Desktop. An explicit project-local `.env` remains available for development; `LOL_ENV_FILE` can select a different local file. Do not put a key in a frontend variable, a URL, an issue, a commit, a screenshot, or a shared log. `.env`, databases, client lockfiles, models, and logs are ignored by Git. The Python lockfile records the versions tested on this machine; `pyproject.toml` gives compatible dependency ranges for other environments.
+Use the local Settings screen to set RIOT_API_KEY, or edit the private profile for developer CLI use. Direct developer CLI commands honor LOL_DATA_DIR in the private profile; Start.cmd selects the checkout data/ folder explicitly. An explicit project-local `.env` remains available for development; `LOL_ENV_FILE` can select a different local file. Do not put a key in a frontend variable, a URL, an issue, a commit, a screenshot, or a shared log. `.env`, databases, client lockfiles, models, and logs are ignored by Git. The Python lockfile records the versions tested on this machine; `pyproject.toml` gives compatible dependency ranges for other environments.
 
 Development:
 

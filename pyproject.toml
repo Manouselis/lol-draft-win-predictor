@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lol-draft-win-predictor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local, privacy-conscious League draft research with recent historical models"
 requires-python = ">=3.11"
 license = "MIT"
