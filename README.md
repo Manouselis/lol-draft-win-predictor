@@ -64,6 +64,10 @@ prevents duplicate collectors from spending the same key's quota.
 
 ## Fresh installation
 
+For a Pi that keeps collecting while the laptop is off, see the
+[Raspberry Pi 5 setup](docs/raspberry-pi.md). It includes a small collector-only
+environment, boot service, graceful shutdown and consistent database transfer.
+
 Requirements: Python 3.11 or newer (3.12 tested), Node.js 22 or newer, pnpm 11, and Git. Tested on Windows 10/11; the backend uses portable Python and SQLite. macOS lockfile discovery is included but has not been exercised on macOS. League of Legends does not have an official Linux client.
 
 ```powershell

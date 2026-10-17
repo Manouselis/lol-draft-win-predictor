@@ -12,9 +12,11 @@ from .storage import Store
 
 
 def run_collection(config, store, settings, *, stop=None, auto_train=False):
-    from .jobs import AutoTrainer
     from .riot import collect
-    automatic = AutoTrainer(config, store, settings) if auto_train else None
+    automatic = None
+    if auto_train:
+        from .jobs import AutoTrainer
+        automatic = AutoTrainer(config, store, settings)
 
     def progress(message):
         store.set_meta("collection", {"status": "running", "message": message, "updated_at": now_ts()})

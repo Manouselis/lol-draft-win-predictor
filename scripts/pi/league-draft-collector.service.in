@@ -1,0 +1,30 @@
+[Unit]
+Description=League Draft Lab historical match collector
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@ROOT@
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@ROOT@/.collector-venv/bin/python @ROOT@/scripts/pi/collector.py --env-file @STATE@/.env --data-dir @ROOT@/data collect --wait-for-time
+Restart=always
+RestartSec=300
+KillSignal=SIGTERM
+TimeoutStopSec=60
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@ROOT@/data @STATE@
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

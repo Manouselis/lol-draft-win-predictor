@@ -24,7 +24,7 @@ def private_file(name):
     return (path.name == ".env" or path.name.startswith(".env.") or
             re.search(r"\.(?:sqlite\w*|joblib|pkl|log|zip|7z)$", path.name) is not None or
             path.name in ("lockfile", "collection.lock", "training.lock") or
-            any(part in ("data", "models", "logs", ".venv", "node_modules") for part in path.parts[:-1]))
+            any(part in ("data", "models", "logs", ".venv", ".collector-venv", "node_modules") for part in path.parts[:-1]))
 
 
 def contains_secret(data):
